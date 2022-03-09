@@ -66,7 +66,6 @@ def measure(messageNumber):
     if printForDebugging is True:
         print("ADCreading = %6.4f" % ADCreading, "    Battery voltage = %8.3f" % batteryVoltage)
 
-
     # Initialize the ADC (ADS1015)
     addr = 72 # for address 72, the ADDR pin of the ADS1015 needs to be conneceted to GND
     gain = 1 # +/-4.096V range, 2mV resolution; See ads1x15.py lib
@@ -81,7 +80,7 @@ def measure(messageNumber):
     # Measurement of DS18B20 (temperature)
     # ************************************
     # DS18B20 data line connected to pin P21 and also to +3.3V via 4.7kohm resistor (pullup)
-    #
+
     ow = OneWire(Pin('P21'))
 
     # Define function to measure the temperature with the DS18X20 sensor
@@ -124,11 +123,22 @@ def measure(messageNumber):
             print("For DS18XB20 with ROM address =", ubinascii.hexlify(rom), "the temperature (degrees C) = %7.1f" % measureTemperature(ow,rom))
     """
 
-    # # testing of ADC
-    # adsDataRate=6 # for ADS reading
-    # (ADCreading,voltage)=adsx15read(ads,irq_pin,adsDataRate,adsChannel=2)
-    # print("Voltage= %6.3f" % voltage)
+    def measureWaterLevel():
+        adsDataRate=6 # for ADS reading
+        RANGE = 5000 # Depth measuring range 5000mm (for water)
+        VOLTAGE_INIT=0.33 # Voltage @ 0mm (uint: Vdc)
+        DENSITY_WATER=1  # Pure water density normalized to
+        (ADCreading,voltage)=adsx15read(ads,irq_pin,adsDataRate,adsChannel=2)
 
+        while True:
+            depth = (round(voltage,2)- VOLTAGE_INIT) * round((RANGE/ DENSITY_WATER / 2.64),2) #Calculate depth from voltage readings
+            if depth is not None:
+                return depth # TempCelsius exit loop and return result
+
+
+    WaterLevel=measureWaterLevel()
+
+    print("Water level= %6.3f" % WaterLevel)
 
     # Read Watermark sensors
     # **********************
@@ -139,7 +149,7 @@ def measure(messageNumber):
     wm=watermark.watermark(S0pin=Pin('P11'),S1pin=Pin('P12'),enableA2Bpin=Pin('P3'),enableB2Apin=Pin('P19'),powerWMpin=Pin('P22'),r1ohms=7870)
     # The rON resistance of the mux is about 8ohm when the watermark resistance varies between 4k and 94k (so in-out current is low).
     # This 80 ohm resistance is twice in series with the watermark resistance.  So we need to substract 160 ohm.
-    wm1kohm=(wm.readWM1(ads,irq_pin,n=1)/1000
+    wm1kohm=(wm.readWM1(ads,irq_pin,n=1)-160)/1000 #substract 160 ohm
     print("WM1: rWatermark (kohm)= %7.3f" % wm1kohm)
     kPa1=watermark.ShockkPa(wm1kohm,soilTempCelsius) # calibration Shock et al. (1989)
 
@@ -154,6 +164,7 @@ def measure(messageNumber):
     wm4kohm=(wm.readWM4(ads,irq_pin,n=1)-160)/1000
     print("WM4: rWatermark (kohm)= %7.3f" % wm4kohm)
     kPa4=watermark.ShockkPa(wm4kohm,soilTempCelsius) # calibration Shock et al. (1989)
+
 
     """ # For testing variability
     sum=0
@@ -223,7 +234,7 @@ def measure(messageNumber):
     print('Will now write to MicroSD memory:')
     try:
         f = open('/sd/test.csv', 'a') # 'w'=write; 'a'=append; 'r'=read
-        f.write('{:11d},{:8.3f},{:7.1f},{:6.3f},{:6.3f},{:6.3f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:10d})\n'.format(utime.time(),batteryVoltage,soilTempCelsius, wm1kohm,wm2kohm,wm3kohm,kPa1,kPa2,kPa3,temperatureC,pressurehPa,relHumidity, messageNumber))  # write data to file
+        f.write('{:11d},{:8.3f},{:7.1f},{:6.3f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:10d})\n'.format(utime.time(),batteryVoltage,soilTempCelsius,wm1kohm,kPa1,WaterLevel,temperatureC,pressurehPa,relHumidity,messageNumber))  # write data to file
         #f.write('{:11d},{:8.3f}\n'.format(utime.time(),voltage))  # write data to file
         f.close()
         os.umount('/sd')
@@ -262,4 +273,4 @@ def measure(messageNumber):
     # pinSD_CMD.hold(1)
     # pinSD_SLCK.hold(1) # en dan ook hold afzetten bij begin!
 
-    return(batteryVoltage,kPa1,kPa2,kPa3,soilTempCelsius,temperatureC,pressurehPa,relHumidity)
+    return(batteryVoltage,kPa1,WaterLevel,soilTempCelsius,temperatureC,pressurehPa,relHumidity)
