@@ -59,8 +59,8 @@ lora.nvram_restore()
 
 # create an OTAA authentication parameters, change them to the provided credentials
 app_eui = ubinascii.unhexlify('0000000000000000')
-app_key = ubinascii.unhexlify('8EDB872DD63489E5DA7883ECB53F48A6')
-dev_eui = ubinascii.unhexlify('70B3D57ED0049375')
+app_key = ubinascii.unhexlify('397BEAFED987DE34E5E9D3ACB2B994A6')
+dev_eui = ubinascii.unhexlify('70B3D57ED004DCAB')
 
 print('lora.has_joined()=',lora.has_joined())
 
@@ -78,14 +78,14 @@ if not lora.has_joined():
 s = socket.socket(socket.AF_LORA, socket.SOCK_RAW)
 
 # set the LoRaWAN data rate
-s.setsockopt(socket.SOL_LORA, socket.SO_DR, 5)
+s.setsockopt(socket.SOL_LORA, socket.SO_DR, 3)
 
 # make the socket non-blocking
 # (because if there's no data received it will block forever...)
 s.setblocking(False)
 
 # Measure the sensors
-batteryVoltage,kPa1,WaterLevel,soilTempCelsius,temperatureC,pressurehPa,relHumidity=measure(messageNumber)
+batteryVoltage,kPa1,WaterLevel,waterTempCelsius,soilTempCelsius,temperatureC,pressurehPa,relHumidity=measure(messageNumber)
 # batteryVoltage,kPa1,kPa2,kPa3,soilTempCelsius,temperatureC,pressurehPa,relHumidity=measure(messageNumber)
 
 # create 22-bytes payload
@@ -94,7 +94,8 @@ MessageNumber=0 # we need to create payload for upload but have no data
 batmV=int(batteryVoltage*1000+0.5) # convert to mV; '+0.5' is to round to nearest integer
 hPa1=int(kPa1*10+0.5)
 soilTempCentigradeCelsius=int(soilTempCelsius*100+0.5)
-WaterLevelMeters=int(WaterLevel/1000+0.5)
+waterTempCentigradeCelsius=int(waterTempCelsius*100+0.5)
+WaterLevelMeters=int(WaterLevel*1000+0.5)
 TempCentigrade=int(temperatureC*100+0.5)
 pressurehPa=int(pressurehPa+0.5)
 relHumiditypermil=int(relHumidity*10+0.5)
@@ -107,7 +108,7 @@ print('unixtimesecs:',unixtimesecs)
 # 'i'=long signed integer 4 bytes = int:32 'I'=long unsigned integer 4 bytes = int:32
 # 'f'=float (single precision real number) 4 bytes
 # 'd'=double (double precision real number) 8 bytes
-payload=ustruct.pack(">HhhhhhhhI",messageNumber,batmV,hPa1,WaterLevelMeters,soilTempCentigradeCelsius,TempCentigrade,pressurehPa,relHumiditypermil,unixtimesecs)
+payload=ustruct.pack(">HhhhhhhhhI",messageNumber,batmV,hPa1,WaterLevelMeters,waterTempCentigradeCelsius,soilTempCentigradeCelsius,TempCentigrade,pressurehPa,relHumiditypermil,unixtimesecs)
 
 def sendpayload(payload):
     print('Sending:', payload)
@@ -136,8 +137,9 @@ sendpayload(payload)
 lora.nvram_save()
 
 print("Time to go to sleep ....")
-sleepSeconds=1200  # set deepsleep time in seconds
+sleepSeconds=900  # set deepsleep time in seconds
 
-machine.deepsleep(sleepSeconds*900) # time in ms
+machine.deepsleep(sleepSeconds*1000) # time in ms
 # Note that when it wakes from deepsleep it reboots, but the RTC keeps time during deepsleep
 # You can always interrupt the deep sleep with the reset button on the LoPy4
+
