@@ -83,11 +83,10 @@ def measure(messageNumber):
 
     ow = OneWire(Pin('P21'))
 
-    # Define function to measure the temperature with the DS18X20 sensor
-    # on a one-wire bus (owBUS).  If several sensors are connected to this bus
-    # you need to specify the ROM address of the sensor as well
-    # If only one DS18x20 device is attached to the bus you may omit the rom parameter.
-    def measureTemperature(owBus,rom=None):
+    roms=ow.scan()
+    print('Found DS devices: ', roms)
+
+    def measureTemperature(owBus,rom):
         while True: # we loop until we get a valid measurement
             temp = DS18X20(owBus)
             temp.start_conversion(rom)
@@ -95,15 +94,17 @@ def measure(messageNumber):
             TempCelsius=temp.read_temp_async(rom)
             if TempCelsius is not None:
                 return TempCelsius # TempCelsius exit loop and return result
-
-    # single temperature measurement omitting the ROM parameter
     while True:
-        soilTempCelsius=measureTemperature(ow)
+        waterTempCelsius=measureTemperature(ow, rom = b'\x28\xff\x64\x1e\x15\xa7\x22\x0b') #bytearray corresponding to 1st DS18B20 
+        if not waterTempCelsius==85:
+            break # jump out of loop
+        print('waterTempCelsius=85°C which means it is equal to the power-on reset value of the temperature register.  Repeat the measurement!')
+
+    while True:
+        soilTempCelsius=measureTemperature(ow, rom = b'\x28\xaa\xc4\xb8\x1a\x13\x02\x18') #bytearray corresponding to 2nd DS18B20 
         if not soilTempCelsius==85:
             break # jump out of loop
         print('soilTempCelsius=85°C which means it is equal to the power-on reset value of the temperature register.  Repeat the measurement!')
-
-    print("Soil temperature (degrees C) = %7.1f" % soilTempCelsius)
 
     """
     # Each DS18X20 has a unique 64-bit (=8 bytes) address in its ROM memory
@@ -122,7 +123,8 @@ def measure(messageNumber):
             # the detected DS18XB20 sensors
             print("For DS18XB20 with ROM address =", ubinascii.hexlify(rom), "the temperature (degrees C) = %7.1f" % measureTemperature(ow,rom))
     """
-
+# Measurement of Water Level Sensor
+# ************************************#
     def measureWaterLevel():
         adsDataRate=6 # for ADS reading
         RANGE = 5000 # Depth measuring range 5000mm (for water)
@@ -131,7 +133,7 @@ def measure(messageNumber):
         (ADCreading,voltage)=adsx15read(ads,irq_pin,adsDataRate,adsChannel=2)
 
         while True:
-            depth = (round(voltage,2)- VOLTAGE_INIT) * round((RANGE/ DENSITY_WATER / 2.64),2) #Calculate depth from voltage readings
+            depth = (voltage - VOLTAGE_INIT) * (RANGE/ DENSITY_WATER / 2.64) #Calculate depth from voltage readings
             if depth is not None:
                 return depth # TempCelsius exit loop and return result
 
@@ -201,9 +203,9 @@ def measure(messageNumber):
     (temperatureC,pressurePa,relHumidity)=bme.read_compensated_data() # to get T, P and RH as tuple of floats
     pressurehPa=pressurePa/100 # conversion from Pa to hPa
 
-    # Write data to MicroSD memory
-    # ****************************
-    # Mount MicroSD memory
+        # Write data to MicroSD memory
+        # ****************************
+        # Mount MicroSD memory
     print('Will now mount MicroSD memory:')
 
     try:
@@ -234,8 +236,8 @@ def measure(messageNumber):
     print('Will now write to MicroSD memory:')
     try:
         f = open('/sd/test.csv', 'a') # 'w'=write; 'a'=append; 'r'=read
-        f.write('{:11d},{:8.3f},{:7.1f},{:6.3f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:10d})\n'.format(utime.time(),batteryVoltage,soilTempCelsius,wm1kohm,kPa1,WaterLevel,temperatureC,pressurehPa,relHumidity,messageNumber))  # write data to file
-        #f.write('{:11d},{:8.3f}\n'.format(utime.time(),voltage))  # write data to file
+        f.write('{:11d},{:8.3f},{:7.1f},{:6.3f},{:6.3f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:7.1f},{:10d})\n'.format(utime.time(),batteryVoltage,soilTempCelsius,waterTempCelsius,WaterLevel,wm1kohm,kPa1,temperatureC,pressurehPa,relHumidity,messageNumber))  # write data to file
+            #f.write('{:11d},{:8.3f}\n'.format(utime.time(),voltage))  # write data to file
         f.close()
         os.umount('/sd')
     except Exception as error:
@@ -260,7 +262,7 @@ def measure(messageNumber):
     p10=Pin("P10",mode=Pin.IN,pull=Pin.PULL_DOWN,alt=-1) # SCL pin for I2C
 
     pinSD_SLCK=Pin("P23",mode=Pin.IN,pull=Pin.PULL_DOWN,alt=-1) # put pull-down resistor on P23
-    # this is the SLCK pin for the microSD card. Default definition is no pullup or pulldown
+    # this is the SLCK pin for the microSD card. Default definition is no pullup or pulldo0wn
     # That pin turned out to increase power consumption from 22µA to 80µA during deepsleep
     # when P23 is connected to microSD.
     pinSD_DAT0=Pin('P8',  mode=Pin.IN, pull=Pin.PULL_DOWN) # also needed to limit power consumption
@@ -273,4 +275,4 @@ def measure(messageNumber):
     # pinSD_CMD.hold(1)
     # pinSD_SLCK.hold(1) # en dan ook hold afzetten bij begin!
 
-    return(batteryVoltage,kPa1,WaterLevel,soilTempCelsius,temperatureC,pressurehPa,relHumidity)
+    return(batteryVoltage,kPa1,WaterLevel,waterTempCelsius,soilTempCelsius,temperatureC,pressurehPa,relHumidity)
